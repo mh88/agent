@@ -802,7 +802,8 @@ func HandleLiveStreamHD(livestreamCursor *packets.QueueCursor, configuration *mo
 			// Should create a track here.
 			streams, _ := rtspClient.GetStreams()
 			videoTrack := webrtc.NewVideoTrack(streams)
-			audioTrack := webrtc.NewAudioTrack(streams)
+			//audioTrack := webrtc.NewAudioTrack(streams)
+			audioTrack := webrtc.NewAudioTrackRTP(streams)
 			go webrtc.WriteToTrack(livestreamCursor, configuration, communication, mqttClient, videoTrack, audioTrack, rtspClient)
 
 			if config.Capture.ForwardWebRTC == "true" {

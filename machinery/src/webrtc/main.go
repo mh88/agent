@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -97,7 +98,7 @@ func RegisterDefaultInterceptors(mediaEngine *pionWebRTC.MediaEngine, intercepto
 	return nil
 }
 
-func InitializeWebRTCConnection(configuration *models.Configuration, communication *models.Communication, mqttClient mqtt.Client, videoTrack *pionWebRTC.TrackLocalStaticSample, audioTrack *pionWebRTC.TrackLocalStaticSample, handshake models.RequestHDStreamPayload) {
+func InitializeWebRTCConnection(configuration *models.Configuration, communication *models.Communication, mqttClient mqtt.Client, videoTrack *pionWebRTC.TrackLocalStaticSample, audioTrack *pionWebRTC.TrackLocalStaticRTP, handshake models.RequestHDStreamPayload) {
 
 	config := configuration.Config
 	deviceKey := config.Key
@@ -283,7 +284,8 @@ func InitializeWebRTCConnection(configuration *models.Configuration, communicati
 				candateBinary, err := json.Marshal(candateJSON)
 				if err == nil {
 					valueMap["candidate"] = string(candateBinary)
-					valueMap["sdp"] = []byte(base64.StdEncoding.EncodeToString([]byte(answer.SDP)))
+					// SDP is not needed to be send..
+					//valueMap["sdp"] = []byte(base64.StdEncoding.EncodeToString([]byte(answer.SDP)))
 					valueMap["session_id"] = handshake.SessionID
 				} else {
 					log.Log.Info("webrtc.main.InitializeWebRTCConnection(): something went wrong while marshalling candidate: " + err.Error())
@@ -359,7 +361,22 @@ func NewAudioTrack(streams []packets.Stream) *pionWebRTC.TrackLocalStaticSample 
 	return outboundAudioTrack
 }
 
-func WriteToTrack(livestreamCursor *packets.QueueCursor, configuration *models.Configuration, communication *models.Communication, mqttClient mqtt.Client, videoTrack *pionWebRTC.TrackLocalStaticSample, audioTrack *pionWebRTC.TrackLocalStaticSample, rtspClient capture.RTSPClient) {
+func NewAudioTrackRTP(streams []packets.Stream) *pionWebRTC.TrackLocalStaticRTP {
+	var mimeType string
+	for _, stream := range streams {
+		if stream.Name == "OPUS" {
+			mimeType = pionWebRTC.MimeTypeOpus
+		} else if stream.Name == "PCM_MULAW" {
+			mimeType = pionWebRTC.MimeTypePCMU
+		} else if stream.Name == "PCM_ALAW" {
+			mimeType = pionWebRTC.MimeTypePCMA
+		}
+	}
+	outboundAudioTrack, _ := pionWebRTC.NewTrackLocalStaticRTP(pionWebRTC.RTPCodecCapability{MimeType: mimeType}, "audio", "pion124")
+	return outboundAudioTrack
+}
+
+func WriteToTrack(livestreamCursor *packets.QueueCursor, configuration *models.Configuration, communication *models.Communication, mqttClient mqtt.Client, videoTrack *pionWebRTC.TrackLocalStaticSample, audioTrack *pionWebRTC.TrackLocalStaticRTP, rtspClient capture.RTSPClient) {
 
 	config := configuration.Config
 
@@ -499,17 +516,35 @@ func WriteToTrack(livestreamCursor *packets.QueueCursor, configuration *models.C
 
 				// We will send the audio
 				sample := pionMedia.Sample{Data: pkt.Data, PacketTimestamp: uint32(pkt.Time)}
-
+				//
+				//if lastAudioSample != nil {
+				//	duration := sample.PacketTimestamp - lastAudioSample.PacketTimestamp
+				//	bufferDurationCasted := time.Duration(duration) * time.Millisecond
+				//	lastAudioSample.Duration = bufferDurationCasted
+				//	if err := audioTrack.WriteSample(*lastAudioSample); err != nil && err != io.ErrClosedPipe {
+				//		log.Log.Error("webrtc.main.WriteToTrack(): something went wrong while writing sample: " + err.Error())
+				//	}
+				//}
+				//
 				if lastAudioSample != nil {
-					duration := sample.PacketTimestamp - lastAudioSample.PacketTimestamp
-					bufferDurationCasted := time.Duration(duration) * time.Millisecond
-					lastAudioSample.Duration = bufferDurationCasted
-					if err := audioTrack.WriteSample(*lastAudioSample); err != nil && err != io.ErrClosedPipe {
+					expected := lastAudioSample.PacketTimestamp + uint32(960)
+					// 处理时间戳跳变（网络抖动补偿）
+					diff := math.Abs(float64(pkt.Packet.Timestamp - expected))
+
+					if diff > 48000 {
+						// 重置时间戳基准
+						pkt.Packet.Timestamp = expected
+					} else if diff > 0 {
+						// 轻微延迟，保持原时间戳
+					}
+
+					if err := audioTrack.WriteRTP(pkt.Packet); err != nil && err != io.ErrClosedPipe {
 						log.Log.Error("webrtc.main.WriteToTrack(): something went wrong while writing sample: " + err.Error())
 					}
 				}
 
 				lastAudioSample = &sample
+
 			}
 		}
 	}

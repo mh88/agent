@@ -315,7 +315,7 @@ func (g *Golibrtsp) Connect(ctx context.Context, ctxOtel context.Context) (err e
 	g.AudioOpusMedia = audioMediOpus
 	g.AudioOpusForma = audioFormaOpus
 	if audioMediOpus == nil {
-		log.Log.Debug("capture.golibrtsp.Connect(Opus): " + "audio media not found")
+		log.Log.Info("-- capture.golibrtsp.Connect(Opus): " + "audio media not found")
 	} else {
 		// setup a audio media
 		_, err = g.Client.Setup(desc.BaseURL, audioMediOpus, 0, 0)
@@ -329,6 +329,7 @@ func (g *Golibrtsp) Connect(ctx context.Context, ctxOtel context.Context) (err e
 				// Something went wrong .. Do something
 				log.Log.Error("capture.golibrtsp.Connect(Opus): " + err.Error())
 			} else {
+				log.Log.Info("-- capture.golibrtsp.Connect(Opus) ok")
 				g.AudioOpusDecoder = audiortpDec
 				streamIndex := len(g.Streams)
 				g.Streams = append(g.Streams, packets.Stream{
@@ -527,6 +528,41 @@ func (g *Golibrtsp) Start(ctx context.Context, streamType string, queue *packets
 				IsVideo:         false,
 				IsAudio:         true,
 				Codec:           "AAC",
+			}
+			queue.WritePacket(pkt)
+		})
+	}
+
+	if g.AudioOpusMedia != nil && g.AudioOpusForma != nil {
+		g.Client.OnPacketRTP(g.AudioOpusMedia, g.AudioOpusForma, func(rtppkt *rtp.Packet) {
+			// decode timestamp
+			pts, ok := g.Client.PacketPTS(g.AudioOpusMedia, rtppkt)
+			pts2, ok := g.Client.PacketPTS2(g.AudioOpusMedia, rtppkt)
+			if !ok {
+				log.Log.Error("capture.golibrtsp.Start(): " + "unable to get PTS")
+				return
+			}
+
+			// Encode the AAC samples from RTP packets
+			// extract access units from RTP packets
+			aus, err := g.AudioOpusDecoder.Decode(rtppkt)
+			if err != nil {
+				log.Log.Error("capture.golibrtsp.Start(): " + err.Error())
+				return
+			}
+
+			pkt := packets.Packet{
+				IsKeyFrame:      false,
+				Packet:          rtppkt,
+				Data:            aus,
+				Time:            pts2,
+				TimeLegacy:      pts,
+				CompositionTime: pts2,
+				CurrentTime:     time.Now().UnixMilli(),
+				Idx:             g.AudioOpusIndex,
+				IsVideo:         false,
+				IsAudio:         true,
+				Codec:           "OPUS",
 			}
 			queue.WritePacket(pkt)
 		})
