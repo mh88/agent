@@ -1,6 +1,6 @@
 package models
 
-import "github.com/kerberos-io/joy4/av"
+import "github.com/nareix/joy4/av"
 
 type Camera struct {
 	Width       int

@@ -1,34 +1,30 @@
 package components
 
 import (
-	"bufio"
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/kerberos-io/agent/machinery/src/capture"
 	"github.com/kerberos-io/agent/machinery/src/log"
 	"github.com/kerberos-io/agent/machinery/src/models"
 	"github.com/kerberos-io/agent/machinery/src/packets"
-	"github.com/kerberos-io/joy4/av"
 	"github.com/pion/rtp"
 	"github.com/zaf/g711"
 )
 
-func GetBackChannelAudioCodec(streams []av.CodecData, communication *models.Communication) av.AudioCodecData {
-	for _, stream := range streams {
-		if stream.Type().IsAudio() {
-			if stream.Type().String() == "PCM_MULAW" {
-				pcmuCodec := stream.(av.AudioCodecData)
-				if pcmuCodec.IsBackChannel() {
-					communication.HasBackChannel = true
-					return pcmuCodec
-				}
-			}
-		}
-	}
-	return nil
-}
+//func GetBackChannelAudioCodec(streams []av.CodecData, communication *models.Communication) av.AudioCodecData {
+//	for _, stream := range streams {
+//		if stream.Type().IsAudio() {
+//			if stream.Type().String() == "PCM_MULAW" {
+//				pcmuCodec := stream.(av.AudioCodecData)
+//				if pcmuCodec.IsBackChannel() {
+//					communication.HasBackChannel = true
+//					return pcmuCodec
+//				}
+//			}
+//		}
+//	}
+//	return nil
+//}
 
 func WriteAudioToBackchannel(communication *models.Communication, rtspClient capture.RTSPClient) {
 	log.Log.Info("Audio.WriteAudioToBackchannel(): writing to backchannel audio codec")
@@ -68,28 +64,28 @@ func WriteAudioToBackchannel(communication *models.Communication, rtspClient cap
 
 }
 
-func WriteFileToBackChannel(infile av.DemuxCloser) {
-	// Do the warmup!
-	file, err := os.Open("./audiofile.bye")
-	if err != nil {
-		fmt.Println("WriteFileToBackChannel: error opening audiofile.bye file")
-	}
-	defer file.Close()
-
-	// Read file into buffer
-	reader := bufio.NewReader(file)
-	buffer := make([]byte, 1024)
-
-	count := 0
-	for {
-		_, err := reader.Read(buffer)
-		if err != nil {
-			break
-		}
-		// Send to backchannel
-		infile.Write(buffer, 2, uint32(count))
-
-		count = count + 1024
-		time.Sleep(128 * time.Millisecond)
-	}
-}
+//func WriteFileToBackChannel(infile av.DemuxCloser) {
+//	// Do the warmup!
+//	file, err := os.Open("./audiofile.bye")
+//	if err != nil {
+//		fmt.Println("WriteFileToBackChannel: error opening audiofile.bye file")
+//	}
+//	defer file.Close()
+//
+//	// Read file into buffer
+//	reader := bufio.NewReader(file)
+//	buffer := make([]byte, 1024)
+//
+//	count := 0
+//	for {
+//		_, err := reader.Read(buffer)
+//		if err != nil {
+//			break
+//		}
+//		// Send to backchannel
+//		infile.Write(buffer, 2, uint32(count))
+//
+//		count = count + 1024
+//		time.Sleep(128 * time.Millisecond)
+//	}
+//}

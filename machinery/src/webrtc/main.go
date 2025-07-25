@@ -3,6 +3,7 @@ package webrtc
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strconv"
 	"sync"
@@ -236,6 +237,7 @@ func InitializeWebRTCConnection(configuration *models.Configuration, communicati
 					CandidatesMutex.Lock()
 					atomic.AddInt64(&peerConnectionCount, 1)
 					CandidatesMutex.Unlock()
+					log.Log.Info("webrtc.main.InitializeWebRTCConnection(): PeerConnectionStateConnected " + handshake.SessionID)
 				} else if connectionState == pionWebRTC.PeerConnectionStateFailed {
 					log.Log.Info("webrtc.main.InitializeWebRTCConnection(): ICEConnectionStateFailed")
 				}
@@ -281,8 +283,7 @@ func InitializeWebRTCConnection(configuration *models.Configuration, communicati
 				candateBinary, err := json.Marshal(candateJSON)
 				if err == nil {
 					valueMap["candidate"] = string(candateBinary)
-					// SDP is not needed to be send..
-					//valueMap["sdp"] = []byte(base64.StdEncoding.EncodeToString([]byte(answer.SDP)))
+					valueMap["sdp"] = []byte(base64.StdEncoding.EncodeToString([]byte(answer.SDP)))
 					valueMap["session_id"] = handshake.SessionID
 				} else {
 					log.Log.Info("webrtc.main.InitializeWebRTCConnection(): something went wrong while marshalling candidate: " + err.Error())
@@ -407,6 +408,10 @@ func WriteToTrack(livestreamCursor *packets.QueueCursor, configuration *models.C
 
 			pkt, cursorError = livestreamCursor.ReadPacket()
 
+			if cursorError != nil {
+				log.Log.Info("webrtc.main.WriteToTrack(): cursorError :" + cursorError.Error())
+			}
+
 			//if config.Capture.ForwardWebRTC != "true" && peerConnectionCount == 0 {
 			//	start = false
 			//	receivedKeyFrame = false
@@ -511,4 +516,16 @@ func WriteToTrack(livestreamCursor *packets.QueueCursor, configuration *models.C
 
 	peerConnectionCount = 0
 	log.Log.Info("webrtc.main.WriteToTrack(): stop writing to track.")
+
+	CandidatesMutex.Lock()
+	for key, pc := range peerConnections {
+		// 关闭 PeerConnection
+		if err := pc.Close(); err != nil {
+			log.Log.Error("webrtc.main.WriteToTrack(): Close err " + err.Error())
+		}
+		log.Log.Info("webrtc.main.WriteToTrack(): close PeerConnection " + key)
+		delete(peerConnections, key)
+		log.Log.Info("webrtc.main.WriteToTrack(): close PeerConnection " + fmt.Sprintf("%d", len(peerConnections)))
+	}
+	CandidatesMutex.Unlock()
 }

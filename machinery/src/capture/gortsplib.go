@@ -1,6 +1,8 @@
 package capture
 
 // #cgo pkg-config: libavcodec libavutil libswscale
+// #cgo CFLAGS: -ID:/ffmpeg/include
+// #cgo LDFLAGS: -LD:/ffmpeg/lib/ -lavformat -lavutil -lavcodec -lswscale
 // #include <libavcodec/avcodec.h>
 // #include <libavutil/imgutils.h>
 // #include <libswscale/swscale.h>
